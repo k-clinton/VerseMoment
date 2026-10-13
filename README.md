@@ -33,7 +33,7 @@ The project uses a simple MVVM-style structure:
 
 ## Setup
 
-1. Install or point Gradle to an Android SDK at `/home/kappy/.local/android-sdk` or your own local SDK directory.
+1. Install or point Gradle to an Android SDK at your own local SDK directory.
 2. Set `local.properties` with:
 
    ```properties
