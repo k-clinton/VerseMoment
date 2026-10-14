@@ -45,13 +45,8 @@ class WallpaperRenderer(
 
     fun renderWallpaper(verse: BibleVerse, themeId: String): Bitmap = renderPreview(verse, themeId)
 
-    fun applyWallpaper(bitmap: Bitmap): Boolean {
-        return try {
-            WallpaperManager.getInstance(context).setBitmap(bitmap, null, false, WallpaperManager.FLAG_LOCK)
-            true
-        } catch (e: Exception) {
-            false
-        }
+    fun applyWallpaper(bitmap: Bitmap) {
+        WallpaperManager.getInstance(context).setBitmap(bitmap, null, false, WallpaperManager.FLAG_LOCK)
     }
 
     fun writeToCache(bitmap: Bitmap, fileName: String): File {
