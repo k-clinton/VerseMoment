@@ -4,6 +4,7 @@ import android.content.Context
 import com.versemoment.app.data.PreferencesRepository
 import com.versemoment.app.data.VerseMomentDatabase
 import com.versemoment.app.data.VerseRepository
+import com.versemoment.app.wallpaper.WallpaperRenderer
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,4 +29,9 @@ object AppModule {
     @Singleton
     fun providePreferencesRepository(@ApplicationContext context: Context): PreferencesRepository =
         PreferencesRepository(context)
+
+    @Provides
+    @Singleton
+    fun provideWallpaperRenderer(@ApplicationContext context: Context): WallpaperRenderer =
+        WallpaperRenderer(context)
 }
