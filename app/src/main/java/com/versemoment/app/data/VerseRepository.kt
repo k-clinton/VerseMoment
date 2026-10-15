@@ -23,7 +23,8 @@ class VerseRepository(
 
     suspend fun translations(): List<BibleTranslation> = verseDao.getTranslations().map { it.toDomain() }
 
-    suspend fun allVerses(): List<BibleVerse> = verseDao.getVersesForTranslation("kjv").map { it.toDomain() }
+    suspend fun allVerses(translationId: String = "kjv"): List<BibleVerse> =
+        verseDao.getVersesForTranslation(translationId).map { it.toDomain() }
 
     suspend fun verseByReference(translationId: String, bookId: String, chapter: Int, verseNumber: Int): BibleVerse? {
         return verseDao.getVerseByReference(translationId, bookId, chapter, verseNumber)?.toDomain()
