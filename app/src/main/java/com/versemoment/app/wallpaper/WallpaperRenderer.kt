@@ -46,7 +46,14 @@ class WallpaperRenderer(
     fun renderWallpaper(verse: BibleVerse, themeId: String): Bitmap = renderPreview(verse, themeId)
 
     fun applyWallpaper(bitmap: Bitmap) {
-        WallpaperManager.getInstance(context).setBitmap(bitmap, null, false, WallpaperManager.FLAG_LOCK)
+        val wallpaperManager = WallpaperManager.getInstance(context)
+        check(wallpaperManager.isWallpaperSupported) {
+            "This device does not support app-set wallpapers."
+        }
+        check(wallpaperManager.isSetWallpaperAllowed) {
+            "Android or your device administrator does not allow this app to set wallpapers."
+        }
+        wallpaperManager.setBitmap(bitmap, null, false, WallpaperManager.FLAG_LOCK)
     }
 
     fun writeToCache(bitmap: Bitmap, fileName: String): File {
