@@ -2,8 +2,8 @@
 
 package com.versemoment.app.ui.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +35,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,11 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.versemoment.app.domain.BibleVerse
-import com.versemoment.app.wallpaper.WallpaperRenderer
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.IOException
+import com.versemoment.app.ui.WallpaperViewModel
+import android.widget.Toast
 
 private val sampleVerses = listOf(
     BibleVerse(
@@ -95,8 +94,9 @@ private val sampleVerses = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(navController: NavController) {
-    val verse = sampleVerses.first()
+fun HomeScreen(navController: NavController, wallpaperViewModel: WallpaperViewModel) {
+    val uiState by wallpaperViewModel.uiState.collectAsState()
+    val verse = uiState.selectedVerse ?: sampleVerses.first()
     var favorite by remember { mutableStateOf(true) }
 
     Scaffold(topBar = {
@@ -171,13 +171,20 @@ fun HomeScreen(navController: NavController) {
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ApplyWallpaperButton(verse = verse, label = "Refresh")
+                Button(
+                    onClick = wallpaperViewModel::refreshWallpaper,
+                    enabled = !uiState.isLoading && !uiState.isApplying,
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Text(if (uiState.isApplying) "Applying…" else "Refresh")
+                }
                 OutlinedButton(onClick = { favorite = !favorite }) {
                     if (favorite) {
                         Icon(Icons.Default.Favorite, contentDescription = null)
                     } else {
                         Icon(Icons.Default.FavoriteBorder, contentDescription = null)
                     }
+                    WallpaperStatus(uiState.statusMessage, uiState.isError)
                     Text(if (favorite) "Saved" else "Save")
                 }
             }
@@ -256,7 +263,8 @@ fun HistoryScreen(navController: NavController) {
 }
 
 @Composable
-fun SettingsScreen(navController: NavController) {
+fun SettingsScreen(navController: NavController, wallpaperViewModel: WallpaperViewModel) {
+    val uiState by wallpaperViewModel.uiState.collectAsState()
     var automation by remember { mutableStateOf(true) }
     var timeMatch by remember { mutableStateOf(true) }
     var divine by remember { mutableStateOf(true) }
@@ -275,26 +283,33 @@ fun SettingsScreen(navController: NavController) {
             SettingRow("Divine Discovery", divine) { divine = it }
             SettingRow("Quiet hours", quietHours) { quietHours = it }
             Button(onClick = { navController.navigate("studio") }) { Text("Wallpaper Studio") }
-            ApplyWallpaperButton(verse = sampleVerses.first(), label = "Manual refresh")
+            Button(
+                onClick = wallpaperViewModel::refreshWallpaper,
+                enabled = !uiState.isLoading && !uiState.isApplying,
+            ) {
+                Text(if (uiState.isApplying) "Applying…" else "Manual refresh")
+            }
+            WallpaperStatus(uiState.statusMessage, uiState.isError)
         }
     }
 }
 
 @Composable
-fun StudioScreen(navController: NavController) {
-    var theme by remember { mutableStateOf("Cinematic Nature") }
+fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperViewModel) {
+    val uiState by wallpaperViewModel.uiState.collectAsState()
+    val selectedVerse = uiState.selectedVerse
     Scaffold(topBar = { TopAppBar(title = { Text("Wallpaper Studio") }) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .height(170.dp)
                     .background(
                         Brush.verticalGradient(
                             listOf(
@@ -307,7 +322,7 @@ fun StudioScreen(navController: NavController) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "The LORD is my shepherd...",
+                    text = selectedVerse?.text ?: if (uiState.isLoading) "Loading verses…" else "No verse selected",
                     color = Color(0xFFF7F3EA),
                     fontFamily = FontFamily.Serif,
                     fontSize = 28.sp,
@@ -315,61 +330,68 @@ fun StudioScreen(navController: NavController) {
                     textAlign = TextAlign.Center,
                 )
             }
-            OutlinedButton(onClick = { /* no-op */ }) { Text("Theme: $theme") }
-            ApplyWallpaperButton(verse = sampleVerses[1], label = "Apply to lock screen")
+            Text("Choose a verse", style = MaterialTheme.typography.titleMedium)
+            if (uiState.isLoading) {
+                Text("Loading your offline verse collection…")
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(uiState.verses, key = { it.id }) { verse ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { wallpaperViewModel.selectVerse(verse) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (verse.id == selectedVerse?.id) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                            ),
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(
+                                    "${verse.bookName} ${verse.chapter}:${verse.verseNumber} • KJV",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    verse.text,
+                                    maxLines = 2,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Button(
+                onClick = wallpaperViewModel::applySelectedVerse,
+                enabled = selectedVerse != null && !uiState.isApplying && !uiState.isLoading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (uiState.isApplying) "Applying…" else "Apply to lock screen")
+            }
+            WallpaperStatus(uiState.statusMessage, uiState.isError)
         }
     }
 }
 
 @Composable
-private fun ApplyWallpaperButton(verse: BibleVerse, label: String) {
-    val context = LocalContext.current.applicationContext
-    val scope = rememberCoroutineScope()
-    var applying by remember { mutableStateOf(false) }
-    var resultMessage by remember { mutableStateOf<String?>(null) }
-    var resultIsError by remember { mutableStateOf(false) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Button(
-            enabled = !applying,
-            onClick = {
-                applying = true
-                resultMessage = null
-                scope.launch {
-                    val error = withContext(Dispatchers.IO) {
-                        try {
-                            val renderer = WallpaperRenderer(context)
-                            val bitmap = renderer.renderWallpaper(verse, "cinematic_nature")
-                            renderer.applyWallpaper(bitmap)
-                            null
-                        } catch (exception: IOException) {
-                            exception
-                        } catch (exception: SecurityException) {
-                            exception
-                        }
-                    }
-                    applying = false
-                    resultIsError = error != null
-                    resultMessage = if (error == null) {
-                        "Wallpaper applied to lock screen"
-                    } else {
-                        "Could not apply wallpaper: ${error.message ?: "permission denied"}"
-                    }
-                }
-            },
-        ) {
-            if (label == "Refresh") {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-            }
-            Text(if (applying) "Applying…" else label)
+private fun WallpaperStatus(message: String?, isError: Boolean) {
+    val context = LocalContext.current
+    LaunchedEffect(message) {
+        if (!message.isNullOrBlank()) {
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
-        resultMessage?.let { message ->
-            Text(
-                text = message,
-                color = if (resultIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
+    }
+    if (!message.isNullOrBlank()) {
+        Text(
+            text = message,
+            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
