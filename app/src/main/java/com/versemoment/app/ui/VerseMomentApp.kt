@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -43,6 +44,7 @@ sealed class Screen(val route: String, val label: String, val icon: androidx.com
 @Composable
 fun VerseMomentApp() {
     val navController = rememberNavController()
+    val wallpaperViewModel: WallpaperViewModel = hiltViewModel()
     val screens = listOf(Screen.Home, Screen.Discover, Screen.Saved, Screen.History, Screen.Settings)
 
     Scaffold(
@@ -74,12 +76,12 @@ fun VerseMomentApp() {
             startDestination = Screen.Home.route,
             modifier = androidx.compose.ui.Modifier.padding(innerPadding),
         ) {
-            composable(Screen.Home.route) { HomeScreen(navController) }
+            composable(Screen.Home.route) { HomeScreen(navController, wallpaperViewModel) }
             composable(Screen.Discover.route) { DiscoverScreen(navController) }
             composable(Screen.Saved.route) { SavedScreen(navController) }
             composable(Screen.History.route) { HistoryScreen(navController) }
-            composable(Screen.Settings.route) { SettingsScreen(navController) }
-            composable(Screen.Studio.route) { StudioScreen(navController) }
+            composable(Screen.Settings.route) { SettingsScreen(navController, wallpaperViewModel) }
+            composable(Screen.Studio.route) { StudioScreen(navController, wallpaperViewModel) }
         }
     }
 }
