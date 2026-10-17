@@ -6,19 +6,22 @@ import com.versemoment.app.domain.SelectionMode
 import com.versemoment.app.domain.WallpaperUpdateResult
 import com.versemoment.app.domain.WallpaperApplyStatus
 import com.versemoment.app.domain.WallpaperSettings
+import android.content.res.AssetManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class VerseRepository(
     private val verseDao: VerseDao,
+    private val assets: AssetManager,
 ) {
     private val favoritesFlow = MutableStateFlow<List<String>>(emptyList())
 
     suspend fun seedTranslationsAndVerses() {
-        val translations = DatabaseSeed.translations()
-        translations.forEach { verseDao.insertTranslation(it) }
-        DatabaseSeed.verses().forEach { verseDao.insertVerse(it) }
-        DatabaseSeed.tags().forEach { verseDao.insertTag(it) }
+        verseDao.insertTranslation(DatabaseSeed.translations().single())
+        if (verseDao.countVerses("kjv") != KjvCatalog.EXPECTED_VERSE_COUNT) {
+            verseDao.replaceVerses(KjvCatalog.load(assets))
+            DatabaseSeed.tags().forEach { verseDao.insertTag(it) }
+        }
     }
 
     suspend fun translations(): List<BibleTranslation> = verseDao.getTranslations().map { it.toDomain() }
