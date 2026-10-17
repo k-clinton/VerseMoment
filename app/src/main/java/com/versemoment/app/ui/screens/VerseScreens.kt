@@ -49,9 +49,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -67,6 +70,17 @@ import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+
+private val verseTextColor = Color(0xFFE7B3FF)
+private val verseTextStyle = TextStyle(
+    fontFamily = FontFamily.Cursive,
+    color = verseTextColor,
+    shadow = Shadow(
+        color = Color(0xFFB54BFF),
+        offset = Offset.Zero,
+        blurRadius = 14f,
+    ),
+)
 
 private val sampleVerses = listOf(
     BibleVerse(
@@ -154,9 +168,8 @@ fun HomeScreen(navController: NavController, wallpaperViewModel: WallpaperViewMo
                     ) {
                         Text(
                             text = "\"${verse.text}\"",
-                            color = Color(0xFFF7F3EA),
                             fontSize = 26.sp,
-                            fontFamily = FontFamily.Serif,
+                            style = verseTextStyle,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -457,8 +470,7 @@ fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperView
                     ) {
                         Text(
                             text = selectedVerse?.text ?: if (uiState.isLoading) "Loading verses…" else "No verse selected",
-                            color = Color(0xFFF7F3EA),
-                            fontFamily = FontFamily.Serif,
+                            style = verseTextStyle,
                             fontSize = 18.sp,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
@@ -526,8 +538,9 @@ fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperView
                                 )
                                 Text(
                                     verse.text,
+                                    style = verseTextStyle,
                                     maxLines = 2,
-                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                 )
                             }
                         }
@@ -622,6 +635,7 @@ private fun VerseCard(verse: BibleVerse, onFavorite: () -> Unit) {
             Text(
                 text = "\"${verse.text}\"",
                 modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                style = verseTextStyle,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
