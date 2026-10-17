@@ -14,6 +14,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.Transaction
 import android.content.Context
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -164,6 +165,14 @@ interface VerseDao {
     suspend fun insertVerse(entity: VerseEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVerses(entities: List<VerseEntity>)
+
+    @Transaction
+    suspend fun replaceVerses(entities: List<VerseEntity>) {
+        entities.chunked(500).forEach { insertVerses(it) }
+    }
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTag(entity: VerseTagEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -177,6 +186,9 @@ interface VerseDao {
 
     @Query("SELECT * FROM verses WHERE translation_id = :translationId ORDER BY book_order, chapter, verse_number")
     suspend fun getVersesForTranslation(translationId: String): List<VerseEntity>
+
+    @Query("SELECT COUNT(*) FROM verses WHERE translation_id = :translationId")
+    suspend fun countVerses(translationId: String): Int
 
     @Query("SELECT * FROM verse_tags WHERE verse_id = :verseId")
     suspend fun getTagsForVerse(verseId: String): List<VerseTagEntity>
@@ -252,8 +264,8 @@ object DatabaseSeed {
             name = "King James Version",
             abbreviation = "KJV",
             languageCode = "en",
-            attribution = "Public domain in the United States. Source: public domain text maintained for offline use.",
-            licenseId = "public-domain",
+            attribution = "King James Version. Text dataset: Thiago Bodruk, Bible JSON; MIT licensed.",
+            licenseId = "mit-thiago-bodruk-bible",
         ),
     )
 
