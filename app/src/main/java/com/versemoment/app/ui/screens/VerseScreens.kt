@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.versemoment.app.domain.BibleVerse
 import com.versemoment.app.ui.WallpaperViewModel
+import java.text.DateFormat
+import java.util.Date
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -208,7 +210,18 @@ fun HomeScreen(navController: NavController, wallpaperViewModel: WallpaperViewMo
                     )
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
                     Text("Requested interval: 5 minutes")
-                    Text("Last successful update: just now")
+                    Text(
+                        uiState.lastAutomationSuccessAt?.let {
+                            "Last automatic update: ${DateFormat.getDateTimeInstance().format(Date(it))}"
+                        } ?: "No automatic wallpaper update has completed yet",
+                    )
+                    uiState.lastAutomationError?.let { error ->
+                        Text(
+                            "Last automatic update failed: $error",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         }
@@ -400,6 +413,11 @@ fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperView
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Choose a verse", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "${uiState.verses.size} verses available • King James Version",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedButton(
                     onClick = wallpaperViewModel::chooseAnotherVerse,
                     enabled = !uiState.isApplying && !uiState.isLoading && uiState.verses.size > 1,
