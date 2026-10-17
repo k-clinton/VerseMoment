@@ -56,6 +56,9 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.versemoment.app.domain.BibleVerse
 import com.versemoment.app.ui.WallpaperViewModel
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
 
 private val sampleVerses = listOf(
@@ -195,7 +198,14 @@ fun HomeScreen(navController: NavController, wallpaperViewModel: WallpaperViewMo
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Automation status", style = MaterialTheme.typography.titleMedium)
-                    Text("Enabled • next update: 5 minutes • lock screen only", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (uiState.automationEnabled) {
+                            "Enabled • updates about every 5 minutes • lock screen only"
+                        } else {
+                            "Automatic updates paused"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
                     Text("Requested interval: 5 minutes")
                     Text("Last successful update: just now")
@@ -269,7 +279,12 @@ fun HistoryScreen(navController: NavController) {
 fun SettingsScreen(navController: NavController, wallpaperViewModel: WallpaperViewModel) {
     val uiState by wallpaperViewModel.uiState.collectAsState()
     WallpaperBackgroundPicker(wallpaperViewModel, uiState.needsBackgroundImage)
-    var automation by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    val exactAlarmSettings = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        wallpaperViewModel.refreshExactAlarmAccess()
+    }
     var timeMatch by remember { mutableStateOf(true) }
     var divine by remember { mutableStateOf(true) }
     var quietHours by remember { mutableStateOf(false) }
@@ -282,7 +297,26 @@ fun SettingsScreen(navController: NavController, wallpaperViewModel: WallpaperVi
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SettingRow("Automation enabled", automation) { automation = it }
+            SettingRow("Automation enabled", uiState.automationEnabled, wallpaperViewModel::setAutomationEnabled)
+            if (uiState.automationEnabled && !uiState.exactAlarmsAllowed) {
+                Text(
+                    "Without exact-alarm access, Android may delay updates. Exact alarms can still be deferred while the phone is idle.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(
+                    onClick = {
+                        exactAlarmSettings.launch(
+                            Intent(
+                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                Uri.parse("package:${context.packageName}"),
+                            ),
+                        )
+                    },
+                ) {
+                    Text("Allow closer-to-5-minute updates")
+                }
+            }
             SettingRow("TimeMatch", timeMatch) { timeMatch = it }
             SettingRow("Divine Discovery", divine) { divine = it }
             SettingRow("Quiet hours", quietHours) { quietHours = it }
