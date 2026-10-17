@@ -30,6 +30,9 @@ data class WallpaperUiState(
     val isApplying: Boolean = false,
     val automationEnabled: Boolean = true,
     val exactAlarmsAllowed: Boolean = true,
+    val lastAutomationAttemptAt: Long? = null,
+    val lastAutomationSuccessAt: Long? = null,
+    val lastAutomationError: String? = null,
     val needsBackgroundImage: Boolean = false,
     val statusMessage: String? = null,
     val isError: Boolean = false,
@@ -50,6 +53,15 @@ class WallpaperViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesRepository.automationEnabledFlow.collect { enabled ->
                 mutableUiState.value = mutableUiState.value.copy(automationEnabled = enabled)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.automationRunStatusFlow.collect { status ->
+                mutableUiState.value = mutableUiState.value.copy(
+                    lastAutomationAttemptAt = status.lastAttemptAt,
+                    lastAutomationSuccessAt = status.lastSuccessAt,
+                    lastAutomationError = status.lastError,
+                )
             }
         }
         viewModelScope.launch {
@@ -82,9 +94,13 @@ class WallpaperViewModel @Inject constructor(
     }
 
     fun refreshExactAlarmAccess() {
-        mutableUiState.value = mutableUiState.value.copy(
-            exactAlarmsAllowed = automationScheduler.canScheduleExactAlarms(),
-        )
+        val exactAlarmsAllowed = automationScheduler.canScheduleExactAlarms()
+        mutableUiState.value = mutableUiState.value.copy(exactAlarmsAllowed = exactAlarmsAllowed)
+        if (exactAlarmsAllowed && mutableUiState.value.automationEnabled) {
+            viewModelScope.launch {
+                automationScheduler.scheduleNextUpdate(preferencesRepository.updateIntervalFlow.first())
+            }
+        }
     }
 
     fun selectVerse(verse: BibleVerse) {
