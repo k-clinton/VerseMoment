@@ -8,7 +8,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
@@ -16,9 +18,11 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import com.versemoment.app.domain.BibleVerse
+import java.io.FileInputStream
 import java.io.File
 import java.io.IOException
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class WallpaperBackgroundUnavailableException(cause: Exception? = null) :
     IOException("Android does not allow VerseMoment to read the current lock-screen wallpaper.", cause)
@@ -63,19 +67,52 @@ class WallpaperRenderer(
     }
 
     fun saveBackgroundFromUri(uri: Uri): Bitmap {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, bounds)
-        } ?: throw IOException("The selected background image could not be opened.")
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-            throw IOException("The selected file is not a supported image.")
+        var decoderFailure: Exception? = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                val bitmap = ImageDecoder.decodeBitmap(
+                    ImageDecoder.createSource(context.contentResolver, uri),
+                ) { decoder, imageInfo, _ ->
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    val scale = min(
+                        1f,
+                        min(
+                            1440f / imageInfo.size.width,
+                            3200f / imageInfo.size.height,
+                        ),
+                    )
+                    decoder.setTargetSize(
+                        (imageInfo.size.width * scale).roundToInt().coerceAtLeast(1),
+                        (imageInfo.size.height * scale).roundToInt().coerceAtLeast(1),
+                    )
+                }
+                saveOriginalBackground(bitmap)
+                return bitmap
+            } catch (exception: IOException) {
+                decoderFailure = exception
+            } catch (exception: SecurityException) {
+                decoderFailure = exception
+            } catch (exception: IllegalArgumentException) {
+                decoderFailure = exception
+            }
         }
-        val options = sampledOptions(bounds.outWidth, bounds.outHeight)
-        val bitmap = context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, options)
-        } ?: throw IOException("The selected background image could not be opened.")
-        saveOriginalBackground(bitmap)
-        return bitmap
+
+        val selectedImage = File.createTempFile("selected-background-", ".image", context.cacheDir)
+        try {
+            copySelectedImage(uri, selectedImage)
+            val bitmap = decodeSampledFile(selectedImage)
+                ?: throw IOException("The selected file does not contain a supported image.")
+            saveOriginalBackground(bitmap)
+            return bitmap
+        } catch (exception: IOException) {
+            decoderFailure?.let(exception::addSuppressed)
+            throw IOException("Could not read the selected image. Try saving it on this device and selecting it again.", exception)
+        } catch (exception: SecurityException) {
+            decoderFailure?.let(exception::addSuppressed)
+            throw IOException("Android did not grant access to the selected image. Select it again and allow access.", exception)
+        } finally {
+            selectedImage.delete()
+        }
     }
 
     fun renderWallpaper(verse: BibleVerse, background: Bitmap): Bitmap {
@@ -178,12 +215,68 @@ class WallpaperRenderer(
     }
 
     private fun decodeSampledFile(file: File): Bitmap? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                return ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, imageInfo, _ ->
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    val scale = min(
+                        1f,
+                        min(
+                            1440f / imageInfo.size.width,
+                            3200f / imageInfo.size.height,
+                        ),
+                    )
+                    decoder.setTargetSize(
+                        (imageInfo.size.width * scale).roundToInt().coerceAtLeast(1),
+                        (imageInfo.size.height * scale).roundToInt().coerceAtLeast(1),
+                    )
+                }
+            } catch (_: IOException) {
+                // Fall back to BitmapFactory for formats supported there but not by ImageDecoder.
+            }
+        }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         return BitmapFactory.decodeFile(
             file.absolutePath,
             sampledOptions(bounds.outWidth, bounds.outHeight),
         )
+    }
+
+    private fun copySelectedImage(uri: Uri, destination: File) {
+        var streamFailure: Exception? = null
+        try {
+            val input = context.contentResolver.openInputStream(uri)
+                ?: throw IOException("The selected image provider returned no data.")
+            input.use { imageStream ->
+                destination.outputStream().buffered().use(imageStream::copyTo)
+            }
+            if (destination.length() > 0) return
+            streamFailure = IOException("The selected image provider returned an empty file.")
+        } catch (exception: IOException) {
+            streamFailure = exception
+        } catch (exception: SecurityException) {
+            streamFailure = exception
+        }
+
+        try {
+            val descriptor = context.contentResolver.openTypedAssetFileDescriptor(uri, "image/*", null)
+                ?: throw IOException("The selected document provider did not return image data.")
+            descriptor.use { asset ->
+                asset.createInputStream().use { imageStream ->
+                    destination.outputStream().buffered().use(imageStream::copyTo)
+                }
+            }
+            if (destination.length() > 0) return
+            throw IOException("The selected image provider returned an empty file.")
+        } catch (exception: IOException) {
+            streamFailure?.let(exception::addSuppressed)
+            throw exception
+        } catch (exception: SecurityException) {
+            streamFailure?.let(exception::addSuppressed)
+            throw IOException("Android denied access to the selected image.", exception)
+        }
     }
 
     private fun sampledOptions(width: Int, height: Int) = BitmapFactory.Options().apply {
