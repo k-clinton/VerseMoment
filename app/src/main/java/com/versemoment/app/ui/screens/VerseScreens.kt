@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -58,10 +59,14 @@ import com.versemoment.app.domain.BibleVerse
 import com.versemoment.app.ui.WallpaperViewModel
 import java.text.DateFormat
 import java.util.Date
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 
 private val sampleVerses = listOf(
     BibleVerse(
@@ -293,10 +298,44 @@ fun SettingsScreen(navController: NavController, wallpaperViewModel: WallpaperVi
     val uiState by wallpaperViewModel.uiState.collectAsState()
     WallpaperBackgroundPicker(wallpaperViewModel, uiState.needsBackgroundImage)
     val context = LocalContext.current
+    var notificationsAllowed by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    var notificationPrompted by rememberSaveable { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        notificationsAllowed = granted
+    }
+    val notificationSettings = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+    }
     val exactAlarmSettings = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
         wallpaperViewModel.refreshExactAlarmAccess()
+    }
+    LaunchedEffect(Unit) {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !notificationsAllowed &&
+            !notificationPrompted
+        ) {
+            notificationPrompted = true
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
     var timeMatch by remember { mutableStateOf(true) }
     var divine by remember { mutableStateOf(true) }
@@ -311,9 +350,43 @@ fun SettingsScreen(navController: NavController, wallpaperViewModel: WallpaperVi
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SettingRow("Automation enabled", uiState.automationEnabled, wallpaperViewModel::setAutomationEnabled)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Text(
+                    if (notificationsAllowed) {
+                        "Notifications are allowed for update status and failure alerts."
+                    } else {
+                        "Notifications are off. Wallpaper updates can still run, but VerseMoment cannot show update alerts."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (notificationsAllowed) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+                if (!notificationsAllowed) {
+                    OutlinedButton(
+                        onClick = {
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        },
+                    ) {
+                        Text("Allow notifications")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            notificationSettings.launch(
+                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                            )
+                        },
+                    ) {
+                        Text("Open notification settings")
+                    }
+                }
+            }
             if (uiState.automationEnabled && !uiState.exactAlarmsAllowed) {
                 Text(
-                    "Without exact-alarm access, Android may delay updates. Exact alarms can still be deferred while the phone is idle.",
+                    "Android requires Alarms & reminders access for closer-to-5-minute updates. Even with access, updates can be deferred while the phone is idle.",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -327,7 +400,7 @@ fun SettingsScreen(navController: NavController, wallpaperViewModel: WallpaperVi
                         )
                     },
                 ) {
-                    Text("Allow closer-to-5-minute updates")
+                    Text("Open Alarms & reminders settings")
                 }
             }
             SettingRow("TimeMatch", timeMatch) { timeMatch = it }
@@ -403,7 +476,7 @@ fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperView
                 }
             }
             Text(
-                "Your current wallpaper image is used as the background, with the verse on a translucent card.",
+                "Android may block apps from reading the current lock-screen image. If it does, choose a background below; the system image picker grants access without broad storage permissions.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
