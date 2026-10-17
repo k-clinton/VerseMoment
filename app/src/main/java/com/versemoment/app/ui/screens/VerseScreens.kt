@@ -34,6 +34,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -49,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -98,6 +101,7 @@ fun HomeScreen(navController: NavController, wallpaperViewModel: WallpaperViewMo
     val uiState by wallpaperViewModel.uiState.collectAsState()
     val verse = uiState.selectedVerse ?: sampleVerses.first()
     var favorite by remember { mutableStateOf(true) }
+    WallpaperBackgroundPicker(wallpaperViewModel, uiState.needsBackgroundImage)
 
     Scaffold(topBar = {
         TopAppBar(
@@ -265,6 +269,7 @@ fun HistoryScreen(navController: NavController) {
 @Composable
 fun SettingsScreen(navController: NavController, wallpaperViewModel: WallpaperViewModel) {
     val uiState by wallpaperViewModel.uiState.collectAsState()
+    WallpaperBackgroundPicker(wallpaperViewModel, uiState.needsBackgroundImage)
     var automation by remember { mutableStateOf(true) }
     var timeMatch by remember { mutableStateOf(true) }
     var divine by remember { mutableStateOf(true) }
@@ -298,6 +303,7 @@ fun SettingsScreen(navController: NavController, wallpaperViewModel: WallpaperVi
 fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperViewModel) {
     val uiState by wallpaperViewModel.uiState.collectAsState()
     val selectedVerse = uiState.selectedVerse
+    WallpaperBackgroundPicker(wallpaperViewModel, uiState.needsBackgroundImage)
     Scaffold(topBar = { TopAppBar(title = { Text("Wallpaper Studio") }) }) { innerPadding ->
         Column(
             modifier = Modifier
@@ -321,14 +327,34 @@ fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperView
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = selectedVerse?.text ?: if (uiState.isLoading) "Loading verses…" else "No verse selected",
-                    color = Color(0xFFF7F3EA),
-                    fontFamily = FontFamily.Serif,
-                    fontSize = 28.sp,
-                    modifier = Modifier.padding(24.dp),
-                    textAlign = TextAlign.Center,
-                )
+                Surface(
+                    color = Color(0xD0101827),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = selectedVerse?.text ?: if (uiState.isLoading) "Loading verses…" else "No verse selected",
+                            color = Color(0xFFF7F3EA),
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 18.sp,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                        selectedVerse?.let { verse ->
+                            Text(
+                                text = "${verse.bookName} ${verse.chapter}:${verse.verseNumber} • KJV",
+                                color = Color(0xFFF1D18B),
+                                modifier = Modifier.padding(top = 8.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -386,8 +412,32 @@ fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperView
             ) {
                 Text(if (uiState.isApplying) "Applying…" else "Apply to lock screen")
             }
+            OutlinedButton(
+                onClick = wallpaperViewModel::requestBackgroundImage,
+                enabled = !uiState.isLoading && !uiState.isApplying,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Choose a different background image")
+            }
             WallpaperStatus(uiState.statusMessage, uiState.isError)
         }
+    }
+}
+
+@Composable
+private fun WallpaperBackgroundPicker(
+    wallpaperViewModel: WallpaperViewModel,
+    requested: Boolean,
+) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) {
+            wallpaperViewModel.backgroundImageSelectionCancelled()
+        } else {
+            wallpaperViewModel.applySelectedVerseWithBackground(uri)
+        }
+    }
+    LaunchedEffect(requested) {
+        if (requested) picker.launch(arrayOf("image/*"))
     }
 }
 
