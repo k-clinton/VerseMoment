@@ -2,6 +2,7 @@ package com.versemoment.app.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.versemoment.app.data.PreferencesRepository
 import com.versemoment.app.data.VerseRepository
 import com.versemoment.app.domain.BibleVerse
@@ -9,6 +10,7 @@ import com.versemoment.app.domain.SelectionMode
 import com.versemoment.app.domain.WallpaperApplyStatus
 import com.versemoment.app.domain.WallpaperUpdateResult
 import com.versemoment.app.wallpaper.WallpaperRenderer
+import com.versemoment.app.wallpaper.WallpaperBackgroundUnavailableException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
@@ -25,6 +27,7 @@ data class WallpaperUiState(
     val selectedVerse: BibleVerse? = null,
     val isLoading: Boolean = true,
     val isApplying: Boolean = false,
+    val needsBackgroundImage: Boolean = false,
     val statusMessage: String? = null,
     val isError: Boolean = false,
 )
@@ -78,6 +81,28 @@ class WallpaperViewModel @Inject constructor(
 
     fun applySelectedVerse() {
         applyVerse(mutableUiState.value.selectedVerse, SelectionMode.DIVINE_DISCOVERY)
+    }
+
+    fun requestBackgroundImage() {
+        if (mutableUiState.value.isApplying || mutableUiState.value.isLoading) return
+        mutableUiState.value = mutableUiState.value.copy(
+            needsBackgroundImage = true,
+            statusMessage = null,
+            isError = false,
+        )
+    }
+
+    fun applySelectedVerseWithBackground(uri: Uri) {
+        mutableUiState.value = mutableUiState.value.copy(needsBackgroundImage = false)
+        applyVerse(mutableUiState.value.selectedVerse, SelectionMode.DIVINE_DISCOVERY, backgroundUri = uri)
+    }
+
+    fun backgroundImageSelectionCancelled() {
+        mutableUiState.value = mutableUiState.value.copy(
+            needsBackgroundImage = false,
+            statusMessage = "No background was selected; your wallpaper was left unchanged.",
+            isError = false,
+        )
     }
 
     fun refreshWallpaper() {
@@ -151,7 +176,12 @@ class WallpaperViewModel @Inject constructor(
             .randomOrNull()
     }
 
-    private fun applyVerse(verse: BibleVerse?, mode: SelectionMode, alreadyApplying: Boolean = false) {
+    private fun applyVerse(
+        verse: BibleVerse?,
+        mode: SelectionMode,
+        alreadyApplying: Boolean = false,
+        backgroundUri: Uri? = null,
+    ) {
         if (verse == null || (mutableUiState.value.isApplying && !alreadyApplying)) return
         mutableUiState.value = mutableUiState.value.copy(
             isApplying = true,
@@ -162,13 +192,24 @@ class WallpaperViewModel @Inject constructor(
             val selectedAt = System.currentTimeMillis()
             val applyError = try {
                 withContext(Dispatchers.IO) {
+                    val background = backgroundUri?.let(wallpaperRenderer::saveBackgroundFromUri)
+                        ?: wallpaperRenderer.loadOriginalBackground()
                     wallpaperRenderer.applyWallpaper(
-                        wallpaperRenderer.renderWallpaper(verse, "cinematic_nature"),
+                        wallpaperRenderer.renderWallpaper(verse, background),
                     )
                 }
                 null
             } catch (exception: Exception) {
                 exception
+            }
+            if (applyError is WallpaperBackgroundUnavailableException) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    isApplying = false,
+                    needsBackgroundImage = true,
+                    statusMessage = "Android could not provide your current lock-screen wallpaper. Choose the background image to keep using.",
+                    isError = false,
+                )
+                return@launch
             }
             val historyError = try {
                 saveHistory(
@@ -193,6 +234,7 @@ class WallpaperViewModel @Inject constructor(
             mutableUiState.value = mutableUiState.value.copy(
                 selectedVerse = verse,
                 isApplying = false,
+                needsBackgroundImage = false,
                 statusMessage = message,
                 isError = applyError != null || historyError != null,
             )
