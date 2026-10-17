@@ -9,6 +9,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.net.Uri
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -40,7 +43,7 @@ class WallpaperRenderer(
                 descriptor.use { parcelFile ->
                     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     BitmapFactory.decodeFileDescriptor(parcelFile.fileDescriptor, null, bounds)
-                    android.system.Os.lseek(parcelFile.fileDescriptor, 0, android.system.OsConstants.SEEK_SET)
+                    Os.lseek(parcelFile.fileDescriptor, 0, OsConstants.SEEK_SET)
                     val options = sampledOptions(bounds.outWidth, bounds.outHeight)
                     val bitmap = BitmapFactory.decodeFileDescriptor(parcelFile.fileDescriptor, null, options)
                     if (bitmap != null) {
@@ -51,6 +54,8 @@ class WallpaperRenderer(
             } catch (exception: SecurityException) {
                 lastException = exception
             } catch (exception: IOException) {
+                lastException = exception
+            } catch (exception: ErrnoException) {
                 lastException = exception
             }
         }
@@ -170,23 +175,22 @@ class WallpaperRenderer(
                 "The wallpaper background could not be saved."
             }
         }
+    }
 
-        private fun decodeSampledFile(file: File): Bitmap? {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.absolutePath, bounds)
-            return BitmapFactory.decodeFile(
-                file.absolutePath,
-                sampledOptions(bounds.outWidth, bounds.outHeight),
-            )
-        }
+    private fun decodeSampledFile(file: File): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        return BitmapFactory.decodeFile(
+            file.absolutePath,
+            sampledOptions(bounds.outWidth, bounds.outHeight),
+        )
+    }
 
-        private fun sampledOptions(width: Int, height: Int) = BitmapFactory.Options().apply {
-            val sample = maxOf(
-                1,
-                width / 1440,
-                height / 3200,
-            )
-            inSampleSize = Integer.highestOneBit(sample)
+    private fun sampledOptions(width: Int, height: Int) = BitmapFactory.Options().apply {
+        var sample = 1
+        while (width / sample > 1440 || height / sample > 3200) {
+            sample *= 2
         }
+        inSampleSize = sample
     }
 }
