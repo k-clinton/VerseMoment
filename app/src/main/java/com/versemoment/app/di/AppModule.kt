@@ -23,8 +23,10 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideRepository(database: VerseMomentDatabase): VerseRepository =
-        VerseRepository(database.verseDao())
+    fun provideRepository(
+        database: VerseMomentDatabase,
+        @ApplicationContext context: Context,
+    ): VerseRepository = VerseRepository(database.verseDao(), context.assets)
 
     @Provides
     @Singleton
