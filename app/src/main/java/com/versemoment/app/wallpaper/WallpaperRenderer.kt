@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.ImageDecoder
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.system.ErrnoException
@@ -141,7 +142,9 @@ class WallpaperRenderer(
         val cardWidth = output.width - outerMargin * 2
         val textWidth = (cardWidth - innerPadding * 2).toInt()
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+            color = Color.parseColor("#E7B3FF")
+            typeface = Typeface.create("cursive", Typeface.NORMAL)
+            setShadowLayer(14f * scale, 0f, 0f, Color.parseColor("#FFB54BFF"))
             textSize = when {
                 verse.text.length > 220 -> 48f * scale
                 verse.text.length > 150 -> 54f * scale
