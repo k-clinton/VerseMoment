@@ -4,7 +4,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import com.versemoment.app.MainActivity
 import com.versemoment.app.data.PreferencesRepository
 import com.versemoment.app.data.VerseMomentDatabase
 import com.versemoment.app.data.VerseRepository
@@ -63,9 +70,10 @@ class BootReceiver : BroadcastReceiver() {
                 enabled = preferences.automationEnabledFlow.first()
                 intervalMinutes = preferences.updateIntervalFlow.first()
                 if (!enabled) return@launch
+                preferences.recordAutomationAttempt(System.currentTimeMillis())
 
                 val database = VerseMomentDatabase.getInstance(appContext)
-                val repository = VerseRepository(database.verseDao())
+                val repository = VerseRepository(database.verseDao(), appContext.assets)
                 repository.seedTranslationsAndVerses()
 
                 val translationId = preferences.selectedTranslationFlow.first()
@@ -94,6 +102,8 @@ class BootReceiver : BroadcastReceiver() {
                             errorMessage = null,
                         ),
                     )
+                    preferences.recordAutomationSuccess(System.currentTimeMillis())
+                    NotificationManagerCompat.from(appContext).cancel(UPDATE_NOTIFICATION_ID)
                 } catch (exception: Exception) {
                     repository.recordHistory(
                         WallpaperUpdateResult(
@@ -111,6 +121,13 @@ class BootReceiver : BroadcastReceiver() {
                 }
             } catch (exception: Exception) {
                 Log.e(TAG, "Scheduled wallpaper update failed", exception)
+                try {
+                    val message = exception.message ?: exception.javaClass.simpleName
+                    preferences.recordAutomationFailure(System.currentTimeMillis(), message)
+                    postFailureNotification(appContext, message)
+                } catch (statusException: Exception) {
+                    Log.e(TAG, "Could not save or notify about the wallpaper update failure", statusException)
+                }
             } finally {
                 try {
                     enabled = preferences.automationEnabledFlow.first()
@@ -124,7 +141,44 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun postFailureNotification(context: Context, error: String) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+            ?: throw IllegalStateException("Notification service is unavailable.")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    NOTIFICATION_CHANNEL_ID,
+                    "Wallpaper automation",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ),
+            )
+        }
+        val openAppIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val message = if (error.contains("current lock-screen wallpaper", ignoreCase = true)) {
+            "Open VerseMoment and choose a background image in Wallpaper Studio."
+        } else {
+            "The lock-screen wallpaper could not be updated: $error"
+        }
+        val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_gallery)
+            .setContentTitle("VerseMoment update failed")
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setContentIntent(openAppIntent)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        manager.notify(UPDATE_NOTIFICATION_ID, notification)
+    }
+
     companion object {
         private const val TAG = "VerseMomentAutomation"
+        private const val NOTIFICATION_CHANNEL_ID = "wallpaper_automation"
+        private const val UPDATE_NOTIFICATION_ID = 1002
     }
 }
