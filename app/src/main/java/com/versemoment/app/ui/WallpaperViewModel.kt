@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.versemoment.app.data.PreferencesRepository
 import com.versemoment.app.data.VerseRepository
+import com.versemoment.app.scheduling.AutomationScheduler
 import com.versemoment.app.domain.BibleVerse
 import com.versemoment.app.domain.SelectionMode
 import com.versemoment.app.domain.WallpaperApplyStatus
@@ -27,6 +28,8 @@ data class WallpaperUiState(
     val selectedVerse: BibleVerse? = null,
     val isLoading: Boolean = true,
     val isApplying: Boolean = false,
+    val automationEnabled: Boolean = true,
+    val exactAlarmsAllowed: Boolean = true,
     val needsBackgroundImage: Boolean = false,
     val statusMessage: String? = null,
     val isError: Boolean = false,
@@ -37,11 +40,18 @@ class WallpaperViewModel @Inject constructor(
     private val verseRepository: VerseRepository,
     private val preferencesRepository: PreferencesRepository,
     private val wallpaperRenderer: WallpaperRenderer,
+    private val automationScheduler: AutomationScheduler,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(WallpaperUiState())
     val uiState: StateFlow<WallpaperUiState> = mutableUiState.asStateFlow()
 
     init {
+        refreshExactAlarmAccess()
+        viewModelScope.launch {
+            preferencesRepository.automationEnabledFlow.collect { enabled ->
+                mutableUiState.value = mutableUiState.value.copy(automationEnabled = enabled)
+            }
+        }
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -71,12 +81,36 @@ class WallpaperViewModel @Inject constructor(
         }
     }
 
+    fun refreshExactAlarmAccess() {
+        mutableUiState.value = mutableUiState.value.copy(
+            exactAlarmsAllowed = automationScheduler.canScheduleExactAlarms(),
+        )
+    }
+
     fun selectVerse(verse: BibleVerse) {
         mutableUiState.value = mutableUiState.value.copy(
             selectedVerse = verse,
             statusMessage = null,
             isError = false,
         )
+    }
+
+    fun setAutomationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                preferencesRepository.setAutomationEnabled(enabled)
+                if (enabled) {
+                    automationScheduler.scheduleNextUpdate(preferencesRepository.updateIntervalFlow.first())
+                } else {
+                    automationScheduler.cancel()
+                }
+            } catch (exception: Exception) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    statusMessage = "Could not ${if (enabled) "enable" else "disable"} automatic updates: ${exception.message ?: exception.javaClass.simpleName}",
+                    isError = true,
+                )
+            }
+        }
     }
 
     fun applySelectedVerse() {
