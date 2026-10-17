@@ -8,7 +8,6 @@ import com.versemoment.app.domain.BibleVerse
 import com.versemoment.app.domain.SelectionMode
 import com.versemoment.app.domain.WallpaperApplyStatus
 import com.versemoment.app.domain.WallpaperUpdateResult
-import com.versemoment.app.selection.SelectionEngine
 import com.versemoment.app.wallpaper.WallpaperRenderer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
@@ -36,7 +35,6 @@ class WallpaperViewModel @Inject constructor(
     private val preferencesRepository: PreferencesRepository,
     private val wallpaperRenderer: WallpaperRenderer,
 ) : ViewModel() {
-    private val selectionEngine = SelectionEngine(verseRepository)
     private val mutableUiState = MutableStateFlow(WallpaperUiState())
     val uiState: StateFlow<WallpaperUiState> = mutableUiState.asStateFlow()
 
@@ -84,24 +82,29 @@ class WallpaperViewModel @Inject constructor(
 
     fun refreshWallpaper() {
         if (mutableUiState.value.isApplying || mutableUiState.value.isLoading) return
+        mutableUiState.value = mutableUiState.value.copy(
+            isApplying = true,
+            statusMessage = "Choosing a new verse…",
+            isError = false,
+        )
         viewModelScope.launch {
             try {
-                val translationId = preferencesRepository.selectedTranslationFlow.first()
                 val selection = withContext(Dispatchers.IO) {
-                    selectionEngine.selectAny(translationId)
+                    chooseDifferentVerse()
                 }
-                val verse = selection?.verse ?: mutableUiState.value.verses.randomOrNull()
-                if (verse == null) {
+                if (selection == null) {
                     mutableUiState.value = mutableUiState.value.copy(
+                        isApplying = false,
                         statusMessage = "No verses are available to apply.",
                         isError = true,
                     )
                 } else {
-                    mutableUiState.value = mutableUiState.value.copy(selectedVerse = verse)
-                    applyVerse(verse, selection?.mode ?: SelectionMode.DIVINE_DISCOVERY)
+                    mutableUiState.value = mutableUiState.value.copy(selectedVerse = selection)
+                    applyVerse(selection, SelectionMode.DIVINE_DISCOVERY, alreadyApplying = true)
                 }
             } catch (exception: Exception) {
                 mutableUiState.value = mutableUiState.value.copy(
+                    isApplying = false,
                     statusMessage = "Could not select a verse: ${exception.message ?: exception.javaClass.simpleName}",
                     isError = true,
                 )
@@ -109,8 +112,47 @@ class WallpaperViewModel @Inject constructor(
         }
     }
 
-    private fun applyVerse(verse: BibleVerse?, mode: SelectionMode) {
-        if (verse == null || mutableUiState.value.isApplying) return
+    fun chooseAnotherVerse() {
+        if (mutableUiState.value.isApplying || mutableUiState.value.isLoading) return
+        viewModelScope.launch {
+            try {
+                val verse = withContext(Dispatchers.IO) { chooseDifferentVerse() }
+                mutableUiState.value = mutableUiState.value.copy(
+                    selectedVerse = verse ?: mutableUiState.value.selectedVerse,
+                    statusMessage = verse?.let {
+                        "Selected ${it.bookName} ${it.chapter}:${it.verseNumber}. Tap Apply to lock screen."
+                    } ?: "No verses are available.",
+                    isError = verse == null,
+                )
+            } catch (exception: Exception) {
+                mutableUiState.value = mutableUiState.value.copy(
+                    statusMessage = "Could not choose a verse: ${exception.message ?: exception.javaClass.simpleName}",
+                    isError = true,
+                )
+            }
+        }
+    }
+
+    private suspend fun chooseDifferentVerse(): BibleVerse? {
+        val state = mutableUiState.value
+        if (state.verses.isEmpty()) return null
+
+        val translationId = preferencesRepository.selectedTranslationFlow.first()
+        val lastAppliedVerseId = verseRepository.history(20)
+            .firstOrNull { it.status == WallpaperApplyStatus.SUCCESS }
+            ?.verseId
+        val excludeIds = setOfNotNull(state.selectedVerse?.id, lastAppliedVerseId)
+        val choices = state.verses.filter { it.id !in excludeIds }
+            .ifEmpty { state.verses.filterNot { it.id == state.selectedVerse?.id } }
+            .ifEmpty { state.verses }
+
+        return choices.filter { it.translationId == translationId }
+            .ifEmpty { choices }
+            .randomOrNull()
+    }
+
+    private fun applyVerse(verse: BibleVerse?, mode: SelectionMode, alreadyApplying: Boolean = false) {
+        if (verse == null || (mutableUiState.value.isApplying && !alreadyApplying)) return
         mutableUiState.value = mutableUiState.value.copy(
             isApplying = true,
             statusMessage = "Applying lock-screen wallpaper…",
