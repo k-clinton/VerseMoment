@@ -558,10 +558,22 @@ private fun WallpaperBackgroundPicker(
     wallpaperViewModel: WallpaperViewModel,
     requested: Boolean,
 ) {
+    val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) {
             wallpaperViewModel.backgroundImageSelectionCancelled()
         } else {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: SecurityException) {
+                // Some providers do not support persisted read access; the URI is still used for the
+                // current selection and will be copied immediately below.
+            } catch (_: IllegalArgumentException) {
+                // Some URIs are not persistable; the immediate stream-opening fallback still handles them.
+            }
             wallpaperViewModel.applySelectedVerseWithBackground(uri)
         }
     }
