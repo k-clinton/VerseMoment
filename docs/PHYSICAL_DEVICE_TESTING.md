@@ -5,7 +5,7 @@ The VerseMoment project was validated for compile-time correctness in this envir
 Use this checklist for hardware verification:
 
 1. Install the app on a physical device running Android 8+.
-2. Use **Apply to lock screen** in Wallpaper Studio and **Refresh** on Home to confirm both actions set the lock-screen wallpaper using `WallpaperManager.FLAG_LOCK`.
+2. In Wallpaper Studio, choose a verse or tap **Pick another**, then apply it; confirm Home **Refresh** applies a different verse and that verse text sits below the clock area.
 3. Review permission prompts, exact alarm usage, and battery optimization guidance.
 4. Check that the app respects quiet hours and does not retrigger in loops.
 5. Verify TimeMatch generation for 08:20 and other edge cases.
