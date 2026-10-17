@@ -22,7 +22,7 @@ The project uses a simple MVVM-style structure:
 - `data` layer provides Room persistence and DataStore-backed preferences
 - `selection` contains deterministic time-based and curated selection logic
 - `wallpaper` handles local bitmap generation and lock-screen application
-- `scheduling` contains the scheduling strategy scaffold for alarm-based automation
+- `scheduling` manages the alarm-based wallpaper automation cycle
 
 ## Requirements
 
@@ -54,7 +54,7 @@ The project uses a simple MVVM-style structure:
 
 ## Scripture and licensing
 
-This MVP includes a legal public-domain sample translation (KJV) and a small offline dataset for selection, discovery, and packaging. The data is stored locally and never depends on a network API. Translation attribution is included in the app and in the model metadata so it can be surfaced in the UI and on the wallpaper when required.
+The app bundles the complete 66-book King James Version (31,102 verses) as an offline JSON asset and imports it into Room on first launch. The dataset is from [Thiago Bodruk's Bible JSON repository](https://github.com/thiagobodruk/bible); its MIT license is included at `app/src/main/assets/BIBLE_DATA_LICENSE.txt`. The app currently provides the KJV only. Data is local after installation and does not depend on a network API.
 
 ## Android scheduling limitations
 
@@ -62,12 +62,12 @@ Android does not guarantee exact five-minute updates under all conditions. The a
 
 ## Physical device testing
 
-This environment does not include a connected Android device or emulator, so wallpaper application, scheduling, and live lock-screen tests were not executed here. The project includes the necessary native hooks and UI flow for those tests on a physical device.
+Physical-device validation is still needed for wallpaper appearance, Samsung battery policy, and alarm timing. Android can defer alarms while the device is idle; the five-minute interval is not guaranteed.
 
 ## Current implementation status
 
 - Project scaffolding complete
 - Android app compiles successfully in this environment
-- Core domain, database, navigation, sample UI, and selection logic implemented
-- Native wallpaper and scheduling logic scaffolded
+- Core domain, database, navigation, offline KJV import, and selection logic implemented
+- Native wallpaper rendering and alarm-driven automation implemented
 - Full physical-device validation remains for a real Android handset
