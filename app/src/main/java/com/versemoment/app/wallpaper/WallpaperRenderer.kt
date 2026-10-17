@@ -28,7 +28,7 @@ class WallpaperRenderer(
 
     fun loadOriginalBackground(): Bitmap {
         if (originalBackgroundFile.exists()) {
-            return BitmapFactory.decodeFile(originalBackgroundFile.absolutePath)
+            return decodeSampledFile(originalBackgroundFile)
                 ?: throw IOException("The saved wallpaper background could not be opened.")
         }
 
@@ -38,7 +38,11 @@ class WallpaperRenderer(
             try {
                 val descriptor = wallpaperManager.getWallpaperFile(which) ?: continue
                 descriptor.use { parcelFile ->
-                    val bitmap = BitmapFactory.decodeFileDescriptor(parcelFile.fileDescriptor)
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFileDescriptor(parcelFile.fileDescriptor, null, bounds)
+                    android.system.Os.lseek(parcelFile.fileDescriptor, 0, android.system.OsConstants.SEEK_SET)
+                    val options = sampledOptions(bounds.outWidth, bounds.outHeight)
+                    val bitmap = BitmapFactory.decodeFileDescriptor(parcelFile.fileDescriptor, null, options)
                     if (bitmap != null) {
                         saveOriginalBackground(bitmap)
                         return bitmap
@@ -54,8 +58,17 @@ class WallpaperRenderer(
     }
 
     fun saveBackgroundFromUri(uri: Uri): Bitmap {
-        val bitmap = context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream)
-            ?: throw IOException("The selected background image could not be opened.")
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        } ?: throw IOException("The selected background image could not be opened.")
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw IOException("The selected file is not a supported image.")
+        }
+        val options = sampledOptions(bounds.outWidth, bounds.outHeight)
+        val bitmap = context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: throw IOException("The selected background image could not be opened.")
         saveOriginalBackground(bitmap)
         return bitmap
     }
@@ -156,6 +169,24 @@ class WallpaperRenderer(
             check(bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)) {
                 "The wallpaper background could not be saved."
             }
+        }
+
+        private fun decodeSampledFile(file: File): Bitmap? {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, bounds)
+            return BitmapFactory.decodeFile(
+                file.absolutePath,
+                sampledOptions(bounds.outWidth, bounds.outHeight),
+            )
+        }
+
+        private fun sampledOptions(width: Int, height: Int) = BitmapFactory.Options().apply {
+            val sample = maxOf(
+                1,
+                width / 1440,
+                height / 3200,
+            )
+            inSampleSize = Integer.highestOneBit(sample)
         }
     }
 }
