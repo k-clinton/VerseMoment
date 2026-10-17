@@ -330,7 +330,20 @@ fun StudioScreen(navController: NavController, wallpaperViewModel: WallpaperView
                     textAlign = TextAlign.Center,
                 )
             }
-            Text("Choose a verse", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Choose a verse", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(
+                    onClick = wallpaperViewModel::chooseAnotherVerse,
+                    enabled = !uiState.isApplying && !uiState.isLoading && uiState.verses.size > 1,
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Text("Pick another")
+                }
+            }
             if (uiState.isLoading) {
                 Text("Loading your offline verse collection…")
             } else {
