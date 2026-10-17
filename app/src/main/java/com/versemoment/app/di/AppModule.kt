@@ -4,6 +4,7 @@ import android.content.Context
 import com.versemoment.app.data.PreferencesRepository
 import com.versemoment.app.data.VerseMomentDatabase
 import com.versemoment.app.data.VerseRepository
+import com.versemoment.app.scheduling.AutomationScheduler
 import com.versemoment.app.wallpaper.WallpaperRenderer
 import dagger.Module
 import dagger.Provides
@@ -34,4 +35,9 @@ object AppModule {
     @Singleton
     fun provideWallpaperRenderer(@ApplicationContext context: Context): WallpaperRenderer =
         WallpaperRenderer(context)
+
+    @Provides
+    @Singleton
+    fun provideAutomationScheduler(@ApplicationContext context: Context): AutomationScheduler =
+        AutomationScheduler(context)
 }
