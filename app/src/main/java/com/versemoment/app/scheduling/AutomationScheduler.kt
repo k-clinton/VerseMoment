@@ -19,7 +19,7 @@ class AutomationScheduler(private val context: Context) {
         val triggerAtMillis = System.currentTimeMillis() + intervalMinutes.coerceAtLeast(1) * 60_000L
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setExactAndAllowWhileIdle(
+                alarmManager.setExact(
                     AlarmManager.RTC_WAKEUP,
                     triggerAtMillis,
                     pendingIntent,
@@ -28,7 +28,7 @@ class AutomationScheduler(private val context: Context) {
                 alarmManager.setWindow(
                     AlarmManager.RTC_WAKEUP,
                     triggerAtMillis,
-                    60_000L,
+                    INEXACT_WINDOW_MILLIS,
                     pendingIntent,
                 )
             }
@@ -36,7 +36,7 @@ class AutomationScheduler(private val context: Context) {
             alarmManager.setWindow(
                 AlarmManager.RTC_WAKEUP,
                 triggerAtMillis,
-                60_000L,
+                INEXACT_WINDOW_MILLIS,
                 pendingIntent,
             )
         }
@@ -58,5 +58,6 @@ class AutomationScheduler(private val context: Context) {
 
     companion object {
         const val ACTION_UPDATE_WALLPAPER = "com.versemoment.app.UPDATE_WALLPAPER"
+        private const val INEXACT_WINDOW_MILLIS = 10 * 60_000L
     }
 }
